@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/md5"
 	"flag"
 	"fmt"
@@ -28,35 +29,62 @@ var maxBlocks = flag.Int(
 	"Maximum number of blocks used for buffer read bytes.  A large value "+
 		"uses more memory at peak but reduces the frequency of reads "+
 		"blocked on hash computation.")
+var useNulDelim = flag.Bool(
+	"null", false,
+	"Use NULL as delimiter between files when reading from stdin.  "+
+		"Intended to be used in conjuction with find -print0.")
+
+func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
+	// For each file, we create a buffered pipe.  We sequentially
+	// write into this pipe and concurrently read from the pipe,
+	// computing its hash.
+
+	pr, pw := bpipe.BufferedPipe(bufMan)
+
+	f, err := os.Open(file)
+	if err != nil {
+		fmt.Printf("%s: ERROR\n", file)
+		return
+	}
+
+	wg.Add(1)
+	go func() {
+		hash := md5.New()
+		io.Copy(hash, pr)
+		fmt.Printf("%x  %s\n", hash.Sum(nil), file)
+		wg.Done()
+	}()
+
+	io.Copy(pw, f)
+	pw.Close()
+	f.Close()
+}
 
 func seekmin(files []string) {
 	bufMan := bpipe.NewBufMan(*blockSize, *maxBlocks)
 
 	var wg sync.WaitGroup
 
-	// For each file, we create a buffered pipe.  We sequentially
-	// write into this pipe and concurrently read from the pipe,
-	// computing its hash.
-	for _, file := range files {
-		pr, pw := bpipe.BufferedPipe(bufMan)
-
-		f, err := os.Open(file)
-		if err != nil {
-			fmt.Printf("%s: ERROR\n", file)
-			continue
+	if len(files) == 0 {
+		reader := bufio.NewReader(os.Stdin)
+		delim := byte('\n')
+		if *useNulDelim {
+			delim = 0
+		}
+		var file string
+		var err error
+		for err == nil {
+			file, err = reader.ReadString(delim)
+			if err == nil {
+				file = file[:len(file)-1]
+				processFile(&wg, bufMan, file)
+			}
 		}
 
-		wg.Add(1)
-		go func(file string) {
-			hash := md5.New()
-			io.Copy(hash, pr)
-			fmt.Printf("%x  %s\n", hash.Sum(nil), file)
-			wg.Done()
-		}(file)
-
-		io.Copy(pw, f)
-		pw.Close()
-		f.Close()
+	} else {
+		for _, file := range files {
+			processFile(&wg, bufMan, file)
+		}
 	}
 
 	wg.Wait()
