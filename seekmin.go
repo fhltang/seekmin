@@ -14,10 +14,24 @@ import (
 	"fmt"
 	"github.com/fhltang/bpipe"
 	"io"
+	"log"
+	"net/http"
 	"os"
 	"sync"
 )
 
+import _"expvar"
+import _"net/http/pprof"
+
+
+var port = flag.Int(
+	"port", 0,
+	"Port on which to run an HTTP server for debug stats.")
+var exitOnCompletion = flag.Bool(
+	"exit_on_completion", false,
+	"Exit on completion.  If --port is specified, setting this to false "+
+		"will cause the program to continue listening for HTTP "+
+		"requets.")
 var blockSize = flag.Int(
 	"block_size", 65536,
 	"File read block size.  A small block size allows memory to be used "+
@@ -93,5 +107,18 @@ func seekmin(files []string) {
 func main() {
 	flag.Parse()
 
+	var server_exited sync.WaitGroup
+	if *port != 0 {
+		log.Printf("Starting server on port %d", *port)
+		go func() {
+			server_exited.Add(1)
+			log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port), nil))
+			server_exited.Done()
+		}()
+	}
+
 	seekmin(flag.Args())
+	if !*exitOnCompletion {
+		server_exited.Wait()
+	}
 }
