@@ -10,6 +10,7 @@ package main
 import (
 	"bufio"
 	"crypto/md5"
+	"expvar"
 	"flag"
 	"fmt"
 	"github.com/fhltang/bpipe"
@@ -20,7 +21,6 @@ import (
 	"sync"
 )
 
-import _"expvar"
 import _"net/http/pprof"
 
 
@@ -48,6 +48,20 @@ var useNulDelim = flag.Bool(
 	"Use NULL as delimiter between files when reading from stdin.  "+
 		"Intended to be used in conjuction with find -print0.")
 
+const HASHER = "hasher"
+const READER = "reader"
+
+// expvar vars
+var (
+	goroutineStart *expvar.Map
+	goroutineDone *expvar.Map
+)
+
+func init() {
+	goroutineStart = expvar.NewMap("goroutine_start")
+	goroutineDone = expvar.NewMap("goroutine_done")
+}
+
 func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
 	// For each file, we create a buffered pipe.  We sequentially
 	// write into this pipe and concurrently read from the pipe,
@@ -63,6 +77,8 @@ func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
 
 	wg.Add(1)
 	go func() {
+		goroutineStart.Add(HASHER, 1)
+		defer goroutineDone.Add(HASHER, 1)
 		hash := md5.New()
 		io.Copy(hash, pr)
 		fmt.Printf("%x  %s\n", hash.Sum(nil), file)
@@ -75,7 +91,7 @@ func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
 }
 
 func seekmin(files []string) {
-	bufMan := bpipe.NewBufMan(*blockSize, *maxBlocks)
+	bufMan := bpipe.NewBufMan("default", *blockSize, *maxBlocks)
 
 	var wg sync.WaitGroup
 
