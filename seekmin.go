@@ -19,10 +19,10 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
-import _"net/http/pprof"
-
+import _ "net/http/pprof"
 
 var port = flag.Int(
 	"port", 0,
@@ -48,18 +48,37 @@ var useNulDelim = flag.Bool(
 	"Use NULL as delimiter between files when reading from stdin.  "+
 		"Intended to be used in conjuction with find -print0.")
 
-const HASHER = "hasher"
-const READER = "reader"
-
 // expvar vars
 var (
-	goroutineStart *expvar.Map
-	goroutineDone *expvar.Map
+	hasherStart = expvar.NewInt("seekmin_hasher_start")
+	hasherDone  = expvar.NewInt("seekmin_hasher_done")
+	readTime    = expvar.NewInt("seekmin_read_time")
+	readBytes   = expvar.NewInt("seekmin_read_bytes")
+	readFiles   = expvar.NewInt("seekmin_read_files")
+	hashedBytes = expvar.NewInt("seekmin_hashed_bytes")
+	uptime      = Uptime()
 )
 
-func init() {
-	goroutineStart = expvar.NewMap("goroutine_start")
-	goroutineDone = expvar.NewMap("goroutine_done")
+type UptimeVar struct {
+	birthtime time.Time
+}
+
+func (this *UptimeVar) String() string {
+	return fmt.Sprintf("%d", time.Since(this.birthtime)/time.Nanosecond)
+}
+
+func Uptime() *UptimeVar {
+	uptime := &UptimeVar{birthtime: time.Now()}
+	expvar.Publish("uptime", uptime)
+	return uptime
+}
+
+func countElapsed(elapsed *expvar.Int, count *expvar.Int, f func()) {
+	start := time.Now()
+	f()
+	delta := time.Since(start)
+	elapsed.Add(int64(delta / time.Nanosecond))
+	count.Add(1)
 }
 
 func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
@@ -77,15 +96,21 @@ func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
 
 	wg.Add(1)
 	go func() {
-		goroutineStart.Add(HASHER, 1)
-		defer goroutineDone.Add(HASHER, 1)
+		hasherStart.Add(1)
+		defer hasherDone.Add(1)
 		hash := md5.New()
-		io.Copy(hash, pr)
+		count, _ := io.Copy(hash, pr)
+		hashedBytes.Add(count)
 		fmt.Printf("%x  %s\n", hash.Sum(nil), file)
 		wg.Done()
 	}()
 
-	io.Copy(pw, f)
+	var count int64
+	countElapsed(readTime, readFiles, func() {
+		count, _ = io.Copy(pw, f)
+		readBytes.Add(count)
+	})
+
 	pw.Close()
 	f.Close()
 }
