@@ -13,7 +13,7 @@ import (
 	"expvar"
 	"flag"
 	"fmt"
-	"github.com/fhltang/bpipe"
+	"github.com/fhltang/seekmin/bpipe"
 	"io"
 	"log"
 	"net/http"
