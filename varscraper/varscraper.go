@@ -4,72 +4,81 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"io/ioutil"
 	"net/http"
-	"strings"
 	"time"
 )
 
-var target = flag.String(
-	"target", "",
-	"Host:port of HTTP server which exports /debug/vars")
-var periodMs = flag.Int(
-	"period_ms", 1000,
-	"Polling period in milliseconds.")
-var varWhitelist = StringList{}
+var configStr = flag.String("config", "", "Configuration.  json.Marshal version of main.Config.")
+var configFile = flag.String("config_file", "", "File from which to read configuration.")
 
-func init() {
-	flag.Var(
-		&varWhitelist, "var_whitelist",
-		"Comma-separated list of vars that should be collected.")
+type Config struct {
+	Target TargetConfig
+	Output OutputConfig
 }
 
-type StringList struct {
-	Values []string
+type TargetConfig struct {
+	Target string
+	PeriodMs int64
+	Vars []string
 }
 
-func (this *StringList) String() string {
-	return strings.Join(this.Values, ",")
-}
-
-func (this *StringList) Set(value string) error {
-	this.Values = strings.Split(value, ",")
-	return nil
+type OutputConfig struct {
+	// None as yet.  Output is CSV format to stdout.
 }
 
 type Scraper struct {
-	target string
-	period time.Duration
-	ticker *time.Ticker
-	whitelist []string
+	config Config
+
+	record chan string
 }
 
-func NewScraper(target string, period time.Duration, whitelist []string) *Scraper {
-	ticker := time.NewTicker(period)
-	scraper := &Scraper{
-		target: target,
-		period: period,
-		ticker: ticker,
-		whitelist: whitelist,
+// Like time.Tick() except we "tick" immediately before waiting period.
+func TickNowAndForever(period time.Duration) <-chan time.Time{
+	ticks := make(chan time.Time)
+	go func() {
+		ticks <- time.Now()
+		c := time.Tick(period)
+		for t := range c {
+			ticks <- t
+		}
+	}()
+	
+	return ticks
+}
+
+func NewScraper(config Config) *Scraper {
+	return &Scraper{config: config, record: make(chan string)}
+}
+
+func (this *Scraper) WriteRecords() {
+	fmt.Print("timestamp")
+	for _, col := range this.config.Target.Vars {
+		fmt.Printf(",%s", col)
 	}
-	return scraper
+	fmt.Println()
+	for rec := range this.record {
+		fmt.Println(rec)
+	}
 }
 
 func (this *Scraper) StartAndWait() {
-	for {
-		select {
-		case t := <-this.ticker.C:
-			this.doScrape(t)
-		}
+	go this.WriteRecords()
+	c := TickNowAndForever(time.Duration(this.config.Target.PeriodMs) * time.Millisecond)
+	for t := range c {
+		this.doScrape(t)
 	}
 }
 
 func (this *Scraper) doScrape(t time.Time) {
-	url := fmt.Sprintf("http://%s/debug/vars", this.target)
+	targetConfig := this.config.Target
+	
+	url := fmt.Sprintf("http://%s/debug/vars", targetConfig.Target)
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Printf("Failed to GET %s", url)
@@ -78,39 +87,59 @@ func (this *Scraper) doScrape(t time.Time) {
 
 	vars, err := ioutil.ReadAll(resp.Body)
 
-	fmt.Print(t.UnixNano())
+	rec := bytes.NewBufferString("")
+
+	rec.WriteString(t.Format(time.RFC3339Nano))
 	
 	var f interface{}
 	err = json.Unmarshal(vars, &f)
 	m := f.(map[string]interface{})
-	for _, k := range this.whitelist {
+	for _, k := range targetConfig.Vars {
+		rec.WriteString(",")
 		if v, ok := m[k]; ok {
 			switch vv:=v.(type) {
 			case map[string]interface{}:
 				for kk, vvv := range vv {
-					fmt.Print(",", kk, "=", vvv)
+					rec.WriteString(fmt.Sprint(kk, "=", vvv))
 				}
 			default:
-				fmt.Print(",", vv)
+				rec.WriteString(fmt.Sprint(vv))
 			}
-		} else {
-			fmt.Print(",")
 		}
 	}
 	
-	fmt.Println()
+	this.record <- rec.String()
 }
 
 func main() {
 	flag.Parse()
 
-	if *target == "" {
-		log.Fatal("Must specify monitoring target using --target.")
+	var config Config
+	var configBytes []byte
+	var err error
+
+	if *configStr != "" && *configFile != "" {
+		log.Fatal("Exactly one of --config or --config_file must be specified")
 	}
 
-	scraper := NewScraper(
-		*target,
-		time.Duration(*periodMs)*time.Millisecond,
-		varWhitelist.Values)
+	if *configFile != "" {
+		configBytes, err = ioutil.ReadFile(*configFile)
+		if err != nil {
+			log.Fatalf("Failed reading config file %s: %s", *configFile, err)
+		}
+	} else {
+		configBytes = []byte(*configStr)
+	}
+
+	err = json.Unmarshal(configBytes, &config)
+	if err != nil {
+		log.Fatalf("Failed to parse config %s: %s", *configStr, err)
+	}
+
+	if config.Target.Target == "" {
+		log.Fatal("Must specify monitoring target in config.")
+	}
+
+	scraper := NewScraper(config)
 	scraper.StartAndWait()
 }
