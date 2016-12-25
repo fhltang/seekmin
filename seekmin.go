@@ -81,12 +81,23 @@ func countElapsed(elapsed *expvar.Int, count *expvar.Int, f func()) {
 	count.Add(1)
 }
 
-func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
+type SeekMin struct {
+	wait sync.WaitGroup
+	bufMan *bpipe.BufMan
+}
+
+func NewSeekMin(blockSize int, maxBlocks int) *SeekMin {
+	return &SeekMin{
+		bufMan: bpipe.NewBufMan("default", blockSize, maxBlocks),
+	}
+}
+
+func (this *SeekMin) processFile(file string) {
 	// For each file, we create a buffered pipe.  We sequentially
 	// write into this pipe and concurrently read from the pipe,
 	// computing its hash.
 
-	pr, pw := bpipe.BufferedPipe(bufMan)
+	pr, pw := bpipe.BufferedPipe(this.bufMan)
 
 	f, err := os.Open(file)
 	if err != nil {
@@ -94,7 +105,7 @@ func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
 		return
 	}
 
-	wg.Add(1)
+	this.wait.Add(1)
 	go func() {
 		hasherStart.Add(1)
 		defer hasherDone.Add(1)
@@ -102,7 +113,7 @@ func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
 		count, _ := io.Copy(hash, pr)
 		hashedBytes.Add(count)
 		fmt.Printf("%x  %s\n", hash.Sum(nil), file)
-		wg.Done()
+		this.wait.Done()
 	}()
 
 	var count int64
@@ -115,11 +126,7 @@ func processFile(wg *sync.WaitGroup, bufMan *bpipe.BufMan, file string) {
 	f.Close()
 }
 
-func seekmin(files []string) {
-	bufMan := bpipe.NewBufMan("default", *blockSize, *maxBlocks)
-
-	var wg sync.WaitGroup
-
+func (this *SeekMin) Run(files []string) {
 	if len(files) == 0 {
 		reader := bufio.NewReader(os.Stdin)
 		delim := byte('\n')
@@ -132,17 +139,17 @@ func seekmin(files []string) {
 			file, err = reader.ReadString(delim)
 			if err == nil {
 				file = file[:len(file)-1]
-				processFile(&wg, bufMan, file)
+				this.processFile(file)
 			}
 		}
 
 	} else {
 		for _, file := range files {
-			processFile(&wg, bufMan, file)
+			this.processFile(file)
 		}
 	}
 
-	wg.Wait()
+	this.wait.Wait()
 }
 
 func main() {
@@ -158,7 +165,8 @@ func main() {
 		}()
 	}
 
-	seekmin(flag.Args())
+	seekmin := NewSeekMin(*blockSize, *maxBlocks)
+	seekmin.Run(flag.Args())
 	if !*exitOnCompletion {
 		server_exited.Wait()
 	}
