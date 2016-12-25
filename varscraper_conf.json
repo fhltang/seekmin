@@ -1,0 +1,21 @@
+{
+    "Target": {
+	"Target": "localhost:8081",
+	"PeriodMs": 1000
+    },
+    "Output": {
+	"FilenamePrefix": "stats-",
+	"MaxRecordsPerFile": 600,
+	"Vars": [
+	    "bufman_bytes",
+	    "bufman_buffers",
+	    "seekmin_hasher_start",
+	    "seekmin_hasher_done",
+	    "seekmin_read_time",
+	    "seekmin_read_bytes",
+	    "seekmin_read_files",
+	    "seekmin_hashed_bytes",
+	    "uptime"
+	]
+    }
+}
