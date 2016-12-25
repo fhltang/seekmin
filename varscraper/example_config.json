@@ -1,7 +1,11 @@
 {
     "Target": {
 	"Target": "localhost:8080",
-	"PeriodMs": 60000,
+	"PeriodMs": 60000
+    },
+    "Output": {
+	"FilenamePrefix": "stats-",
+	"MaxRecordsPerFile": 1000,
 	"Vars": ["uptime"]
     }
 }
