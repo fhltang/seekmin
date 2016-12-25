@@ -98,36 +98,44 @@ func (this *SeekMin) processFile(file string) {
 	// computing its hash.
 
 	pr, pw := bpipe.BufferedPipe(this.bufMan)
+	defer pw.Close()
 
 	f, err := os.Open(file)
 	if err != nil {
 		fmt.Printf("%s: ERROR\n", file)
 		return
 	}
+	defer f.Close()
 
 	this.wait.Add(1)
 	go func() {
+		defer this.wait.Done()
 		hasherStart.Add(1)
 		defer hasherDone.Add(1)
 		hash := md5.New()
-		count, _ := io.Copy(hash, pr)
+		count, err := io.Copy(hash, pr)
+		if err != nil {
+			log.Printf("Failed hashing file %s: %s", file, err)
+			return
+		}
 		hashedBytes.Add(count)
 		fmt.Printf("%x  %s\n", hash.Sum(nil), file)
-		this.wait.Done()
 	}()
 
 	var count int64
 	countElapsed(readTime, readFiles, func() {
-		count, _ = io.Copy(pw, f)
+		count, err = io.Copy(pw, f)
+		if err != nil{
+			log.Printf("Failed reading file %s: %s", file, err)
+			return
+		}
 		readBytes.Add(count)
 	})
-
-	pw.Close()
-	f.Close()
 }
 
 func (this *SeekMin) Run(files []string) {
 	if len(files) == 0 {
+		// No files provided.  Read files from stdin.
 		reader := bufio.NewReader(os.Stdin)
 		delim := byte('\n')
 		if *useNulDelim {
@@ -135,12 +143,13 @@ func (this *SeekMin) Run(files []string) {
 		}
 		var file string
 		var err error
-		for err == nil {
+		for {
 			file, err = reader.ReadString(delim)
-			if err == nil {
-				file = file[:len(file)-1]
-				this.processFile(file)
+			if err != nil {
+				log.Fatalf("Failed to read filename %s: %s", file, err)
 			}
+			file = file[:len(file)-1]
+			this.processFile(file)
 		}
 
 	} else {

@@ -122,7 +122,7 @@ func (this *BufferedPipeWriter) Close() {
 	this.state.cond.Signal()
 }
 
-func (this *BufferedPipeWriter) Write(p []byte) (n int, err error) {
+func (this *BufferedPipeWriter) Write(p []byte) (int, error) {
 	r := bytes.NewReader(p)
 	return this.ReadFrom(r)
 }
