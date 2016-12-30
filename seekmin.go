@@ -88,7 +88,7 @@ type SeekMin struct {
 
 func NewSeekMin(blockSize int, maxBlocks int) *SeekMin {
 	return &SeekMin{
-		bufMan: bpipe.NewBufMan("default", blockSize, maxBlocks),
+		bufMan: bpipe.NewBufMan("default", maxBlocks, blockSize),
 	}
 }
 
