@@ -123,18 +123,21 @@ func (this *Scraper) StartAndWait() {
 }
 
 func (this *Scraper) doScrape(t time.Time) {
+	rec := bytes.NewBufferString(t.Format(time.RFC3339Nano))
+	defer func() { this.record <- rec.String() }()
+
+
 	url := fmt.Sprintf("http://%s/debug/vars", this.config.Target.Target)
 	resp, err := http.Get(url)
 	if err != nil {
 		log.Printf("Failed to GET %s", url)
+		for _, _ = range this.config.Output.Vars {
+			rec.WriteString(",")
+		}
 		return
 	}
 
 	vars, err := ioutil.ReadAll(resp.Body)
-
-	rec := bytes.NewBufferString("")
-
-	rec.WriteString(t.Format(time.RFC3339Nano))
 
 	var f interface{}
 	err = json.Unmarshal(vars, &f)
@@ -153,7 +156,6 @@ func (this *Scraper) doScrape(t time.Time) {
 		}
 	}
 
-	this.record <- rec.String()
 }
 
 func main() {
