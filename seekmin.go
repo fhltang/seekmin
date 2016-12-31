@@ -94,7 +94,7 @@ func (this *SeekMin) Run(files []string) {
 
 	// Goroutines to read files.
 	for i:=0; i<*numReaders; i++ {
-		go seekmin.Reader(filenames, itemsToHash, this.bufMan, &this.wait)
+		go seekmin.Reader(filenames, itemsToHash, this.bufMan)
 	}
 
 	// Goroutines to hash bytes read from files.
