@@ -9,12 +9,11 @@ package main
 
 import (
 	"bufio"
-	"crypto/md5"
 	"expvar"
 	"flag"
 	"fmt"
 	"github.com/fhltang/seekmin/bpipe"
-	"io"
+	"github.com/fhltang/seekmin/seekmin"
 	"log"
 	"net/http"
 	"os"
@@ -47,15 +46,20 @@ var useNulDelim = flag.Bool(
 	"null", false,
 	"Use NULL as delimiter between files when reading from stdin.  "+
 		"Intended to be used in conjuction with find -print0.")
+var numReaders = flag.Int(
+	"num_readers", 1,
+	"Number of reader threads.  Using 1 minimises seeks which is good " +
+	"for spinning disks.  SSDs may benefit from more reader threads.")
+var numHashers = flag.Int(
+	"num_hashers", 4,
+	"Number of hasher threads.")
+var hasherQueueBound = flag.Int(
+	"hasher_queue_bound", 10000,
+	"How many items of work can be queued up for the hashers.  Set " +
+	"this to an infeasibly large number.")
 
 // expvar vars
 var (
-	hasherStart = expvar.NewInt("seekmin_hasher_start")
-	hasherDone  = expvar.NewInt("seekmin_hasher_done")
-	readTime    = expvar.NewInt("seekmin_read_time")
-	readBytes   = expvar.NewInt("seekmin_read_bytes")
-	readFiles   = expvar.NewInt("seekmin_read_files")
-	hashedBytes = expvar.NewInt("seekmin_hashed_bytes")
 	uptime      = Uptime()
 )
 
@@ -73,14 +77,6 @@ func Uptime() *UptimeVar {
 	return uptime
 }
 
-func countElapsed(elapsed *expvar.Int, count *expvar.Int, f func()) {
-	start := time.Now()
-	f()
-	delta := time.Since(start)
-	elapsed.Add(int64(delta / time.Nanosecond))
-	count.Add(1)
-}
-
 type SeekMin struct {
 	wait sync.WaitGroup
 	bufMan *bpipe.BufMan
@@ -92,48 +88,20 @@ func NewSeekMin(blockSize int, maxBlocks int) *SeekMin {
 	}
 }
 
-func (this *SeekMin) processFile(file string) {
-	// For each file, we create a buffered pipe.  We sequentially
-	// write into this pipe and concurrently read from the pipe,
-	// computing its hash.
-
-	pr, pw := bpipe.BufferedPipe(this.bufMan)
-	defer pw.Close()
-
-	f, err := os.Open(file)
-	if err != nil {
-		fmt.Printf("%s: ERROR\n", file)
-		return
-	}
-	defer f.Close()
-
-	this.wait.Add(1)
-	go func() {
-		defer this.wait.Done()
-		hasherStart.Add(1)
-		defer hasherDone.Add(1)
-		hash := md5.New()
-		count, err := io.Copy(hash, pr)
-		if err != nil {
-			log.Printf("Failed hashing file %s: %s", file, err)
-			return
-		}
-		hashedBytes.Add(count)
-		fmt.Printf("%x  %s\n", hash.Sum(nil), file)
-	}()
-
-	var count int64
-	countElapsed(readTime, readFiles, func() {
-		count, err = io.Copy(pw, f)
-		if err != nil{
-			log.Printf("Failed reading file %s: %s", file, err)
-			return
-		}
-		readBytes.Add(count)
-	})
-}
-
 func (this *SeekMin) Run(files []string) {
+	filenames := make(chan string)
+	itemsToHash := make(chan seekmin.ItemToHash, *hasherQueueBound)
+
+	// Goroutines to read files.
+	for i:=0; i<*numReaders; i++ {
+		go seekmin.Reader(filenames, itemsToHash, this.bufMan, &this.wait)
+	}
+
+	// Goroutines to hash bytes read from files.
+	for i:=0; i<*numHashers; i++ {
+		go seekmin.Hasher(itemsToHash, &this.wait)
+	}
+
 	if len(files) == 0 {
 		// No files provided.  Read files from stdin.
 		reader := bufio.NewReader(os.Stdin)
@@ -149,12 +117,14 @@ func (this *SeekMin) Run(files []string) {
 				log.Fatalf("Failed to read filename %s: %s", file, err)
 			}
 			file = file[:len(file)-1]
-			this.processFile(file)
+			this.wait.Add(1)
+			filenames <- file
 		}
 
 	} else {
 		for _, file := range files {
-			this.processFile(file)
+			this.wait.Add(1)
+			filenames <- file
 		}
 	}
 
