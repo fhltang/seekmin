@@ -48,19 +48,19 @@ var useNulDelim = flag.Bool(
 		"Intended to be used in conjuction with find -print0.")
 var numReaders = flag.Int(
 	"num_readers", 1,
-	"Number of reader threads.  Using 1 minimises seeks which is good " +
-	"for spinning disks.  SSDs may benefit from more reader threads.")
+	"Number of reader threads.  Using 1 minimises seeks which is good "+
+		"for spinning disks.  SSDs may benefit from more reader threads.")
 var numHashers = flag.Int(
 	"num_hashers", 4,
 	"Number of hasher threads.")
 var hasherQueueBound = flag.Int(
 	"hasher_queue_bound", 10000,
-	"How many items of work can be queued up for the hashers.  Set " +
-	"this to an infeasibly large number.")
+	"How many items of work can be queued up for the hashers.  Set "+
+		"this to an infeasibly large number.")
 
 // expvar vars
 var (
-	uptime      = Uptime()
+	uptime = Uptime()
 )
 
 type UptimeVar struct {
@@ -78,7 +78,7 @@ func Uptime() *UptimeVar {
 }
 
 type SeekMin struct {
-	wait sync.WaitGroup
+	wait   sync.WaitGroup
 	bufMan *bpipe.BufMan
 }
 
@@ -93,12 +93,12 @@ func (this *SeekMin) Run(files []string) {
 	itemsToHash := make(chan seekmin.ItemToHash, *hasherQueueBound)
 
 	// Goroutines to read files.
-	for i:=0; i<*numReaders; i++ {
+	for i := 0; i < *numReaders; i++ {
 		go seekmin.Reader(filenames, itemsToHash, this.bufMan)
 	}
 
 	// Goroutines to hash bytes read from files.
-	for i:=0; i<*numHashers; i++ {
+	for i := 0; i < *numHashers; i++ {
 		go seekmin.Hasher(itemsToHash, &this.wait)
 	}
 
