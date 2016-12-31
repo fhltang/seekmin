@@ -26,7 +26,7 @@ endfunction
 # Example usage:
 #   plot_read_bytes_files("stats-20161230-190347.86.csv", "graph.png", 60)
 function plot_read_bytes_files (filename, graph_filename, window)
-  d = dlmread(filename, ",")
+  d = dlmread(filename, ",", 1, 0)
   rates = rate(d(:, [1, 7, 8]), window)
   plotyy(rates(:, 1), rates(:, 2), rates(:, 1), rates(:, 3))
   # axis([0, Inf, 0, Inf])
