@@ -123,7 +123,7 @@ func (this *Scraper) StartAndWait() {
 }
 
 func (this *Scraper) doScrape(t time.Time) {
-	rec := bytes.NewBufferString(t.Format(time.RFC3339Nano))
+	rec := bytes.NewBufferString(fmt.Sprintf("%d", t.UnixNano()))
 	defer func() { this.record <- rec.String() }()
 
 
