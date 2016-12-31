@@ -24,13 +24,13 @@ var (
 // pipe.  The reader end of the buffered pipe is inserted into a queue
 // to be processed by hasher goroutines.
 
-func Reader(filenames chan string, itemsToHash chan ItemToHash, bufMan *bpipe.BufMan, pending *sync.WaitGroup) {
+func Reader(filenames <-chan string, itemsToHash chan<- ItemToHash, bufMan *bpipe.BufMan, pending *sync.WaitGroup) {
 	for file := range filenames {
 		doRead(file, itemsToHash, bufMan, pending)
 	}
 }
 
-func doRead(file string, itemsToHash chan ItemToHash, bufMan *bpipe.BufMan, pending *sync.WaitGroup) {
+func doRead(file string, itemsToHash chan<- ItemToHash, bufMan *bpipe.BufMan, pending *sync.WaitGroup) {
 	// For each file, we create a buffered pipe.  We sequentially
 	// write into this pipe and concurrently read from the pipe,
 	// computing its hash.

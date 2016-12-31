@@ -21,7 +21,7 @@ type ItemToHash struct {
 	Filename string
 }
 
-func Hasher(itemsToHash chan ItemToHash, pending *sync.WaitGroup) {
+func Hasher(itemsToHash <-chan ItemToHash, pending *sync.WaitGroup) {
 	for item := range itemsToHash {
 		doHash(item, pending)
 	}
