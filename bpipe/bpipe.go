@@ -14,36 +14,32 @@ var (
 	bufmanBuffers = expvar.NewInt("bufman_buffers")
 )
 
-// BufMan is a buffer manager.  It manages a pool of bytes.Buffer.
+// BufMan is a buffer manager.  It manages a pool of byte slices.
 type BufMan struct {
 	Name string
 	pool *bpool.BPool
 }
 
-// Creat a BufMan which can allocate up to max Buffer each with
-// capacity bufCap.
+// Creat a BufMan which can allocate up to `max` slices each with
+// capacity `bufCap`.
 func NewBufMan(name string, max int, bufCap int) *BufMan {
 	newBuf := func() interface{} {
-		buffer := bytes.Buffer{}
-		buffer.Grow(bufCap)
-		bufmanBytes.Add(int64(bufCap))
-		bufmanBuffers.Add(1)
-		return &buffer
+		return make([]byte, bufCap)
 	}
 	return &BufMan{Name: name, pool: bpool.New(max, newBuf)}
 }
 
-func (this *BufMan) Acquire() *bytes.Buffer {
-	return this.pool.Get().(*bytes.Buffer)
+func (this *BufMan) Acquire() []byte {
+	return this.pool.Get().([]byte)
 }
 
-func (this *BufMan) Release(buffer *bytes.Buffer) {
+func (this *BufMan) Release(buffer []byte) {
 	this.pool.Put(buffer)
 }
 
 // State for a BufferedPipe.
 type bufferedPipeState struct {
-	// Buffer manager used to allocate byts.Buffer objects.
+	// Buffer manager used to allocate byte slices.
 	bufMan *BufMan
 
 	// Condition variable to protect the following fields.
@@ -102,7 +98,7 @@ func (this *BufferedPipeReader) Read(p []byte) (int, error) {
 			this.state.cond.L.Unlock()
 			e = nil
 
-			this.state.bufMan.Release(buffer)
+			this.state.bufMan.Release(buffer.Bytes())
 		} else if err != nil {
 			break
 		}
@@ -128,17 +124,17 @@ func (this *BufferedPipeWriter) Write(p []byte) (int, error) {
 }
 
 func (this *BufferedPipeWriter) ReadFrom(r io.Reader) (int, error) {
-	var n int64
+	var n int
 	var err error
 
-	var cum int64 = 0
+	var cum int
 
 	for err == nil {
 		buffer := this.state.bufMan.Acquire()
-		buffer.Reset()
+		buffer = buffer[:cap(buffer)]
 
-		lr := io.LimitReader(r, int64(cap(buffer.Bytes())))
-		n, err = io.Copy(buffer, lr)
+		n, err = r.Read(buffer)
+		buffer = buffer[:n]
 		cum += n
 
 		if n == 0 {
@@ -147,7 +143,7 @@ func (this *BufferedPipeWriter) ReadFrom(r io.Reader) (int, error) {
 		}
 
 		this.state.cond.L.Lock()
-		this.state.pending.PushBack(buffer)
+		this.state.pending.PushBack(bytes.NewBuffer(buffer))
 		this.state.cond.L.Unlock()
 
 		this.state.cond.Signal()
