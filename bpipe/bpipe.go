@@ -124,29 +124,35 @@ func (this *BufferedPipeWriter) Write(p []byte) (int, error) {
 }
 
 func (this *BufferedPipeWriter) ReadFrom(r io.Reader) (int, error) {
-	var n int
 	var err error
 
 	var cum int
 
-	for err == nil {
+	for {
 		buffer := this.state.bufMan.Acquire()
 		buffer = buffer[:cap(buffer)]
 
-		n, err = r.Read(buffer)
-		buffer = buffer[:n]
-		cum += n
-
+		n, er := r.Read(buffer)
 		if n == 0 {
 			this.state.bufMan.Release(buffer)
 			break
 		}
+		buffer = buffer[:n]
+		cum += n
 
 		this.state.cond.L.Lock()
 		this.state.pending.PushBack(bytes.NewBuffer(buffer))
 		this.state.cond.L.Unlock()
 
 		this.state.cond.Signal()
+
+		if er == io.EOF {
+			break
+		}
+		if er != nil {
+			err = er
+			break
+		}
 	}
 
 	return int(cum), err

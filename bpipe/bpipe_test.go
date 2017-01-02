@@ -17,15 +17,29 @@ func ReadWrite(t *testing.T,
 	pipeBufSize int, readBufSize int, writeBufSize int) {
 	pr, pw := bpipe.BufferedPipe(bpipe.NewBufMan("Test", pipeBufSize, 100))
 
+	var n int64
+	var err error
 	r := strings.NewReader("some io.Reader stream to be read\n")
 
 	readBuf := make([]byte, readBufSize, readBufSize)
-	io.CopyBuffer(pw, r, readBuf)
+	n, err = io.CopyBuffer(pw, r, readBuf)
+	if n != 33 {
+		t.Errorf("Unexpected count of bytes copied: %s", n)
+	}
+	if err != nil {
+		t.Errorf("Unexpected error: %s", err)
+	}
 	pw.Close()
 
 	writeBuf := make([]byte, writeBufSize, writeBufSize)
 	var buffer bytes.Buffer
-	io.CopyBuffer(&buffer, pr, writeBuf)
+	n, err = io.CopyBuffer(&buffer, pr, writeBuf)
+	if n != 33 {
+		t.Errorf("Unexpected count of bytes copied: %s", n)
+	}
+	if err != nil {
+		t.Errorf("Unexpected error: %s", err)
+	}
 
 	if buffer.String() != "some io.Reader stream to be read\n" {
 		t.Error("*" + buffer.String() + "*")
