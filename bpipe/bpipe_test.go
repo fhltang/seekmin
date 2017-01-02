@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/fhltang/seekmin/bpipe"
 	"io"
+	"io/ioutil"
 	"strings"
 	"testing"
 )
@@ -45,4 +46,34 @@ func TestReadWrite_LargeReadBuf_SmallWriteBuf(t *testing.T) {
 
 func TestReadWrite_SmallReadBuf_SmallWriteBuf(t *testing.T) {
 	ReadWrite(t, 4, 2, 2)
+}
+
+// Baseline benchmark.  Copies 1MB of bytes to ioutil.Discard.
+func BenchmarkBaseline(b *testing.B) {
+	src := make([]byte, 1024*1024)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		io.Copy(ioutil.Discard, bytes.NewReader(src))
+	}
+
+}
+
+// Benchmark for reading and writing from a buffered pipe.
+// Copies 1MB into the pipe and then 1MB out of the pipe.
+func BenchmarkReadWrite(b *testing.B) {
+	src := make([]byte, 1024*1024)
+
+	blockSize := 16384
+	maxBlocks := 1 + len(src)/blockSize
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		pr, pw := bpipe.BufferedPipe(
+			bpipe.NewBufMan("test", maxBlocks, blockSize))
+		io.Copy(pw, bytes.NewReader(src))
+		pw.Close()
+		io.Copy(ioutil.Discard, pr)
+	}
+
 }
