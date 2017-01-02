@@ -33,3 +33,12 @@ function plot_read_bytes_filesize (filename, graph_filename, window)
   ylim(ax(2), [0, max(h2)])
   print(graph_filename)
 endfunction
+
+function plot_in_flight_hashers(filename, graph_filename)
+  d = dlmread(filename, ",", 1, 0)
+  in_flight_hashers = horzcat(d(:, 1), d(:, 4) .- d(:, 5))
+  y1 = in_flight_hashers(:, 2)
+  plot(in_flight_hashers(:, 1), y1)
+  ylim([0, max(y1)])
+  print(graph_filename)
+endfunction
