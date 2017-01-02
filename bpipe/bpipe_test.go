@@ -77,3 +77,44 @@ func BenchmarkReadWrite(b *testing.B) {
 	}
 
 }
+
+// Benchmark for writing to a buffered pipe.
+// Copies 1MB into the pipe.
+func BenchmarkWrite(b *testing.B) {
+	src := make([]byte, 1024*1024)
+
+	blockSize := 16384
+	maxBlocks := 1 + len(src)/blockSize
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, pw := bpipe.BufferedPipe(
+			bpipe.NewBufMan("test", maxBlocks, blockSize))
+		io.Copy(pw, bytes.NewReader(src))
+		pw.Close()
+	}
+
+}
+
+// Benchmark for reading from a buffered pipe.
+//
+// Copies 1MB into the pipe and then 1MB out of the pipe, timing only
+// the read.
+func BenchmarkRead(b *testing.B) {
+	src := make([]byte, 1024*1024)
+
+	blockSize := 16384
+	maxBlocks := 1 + len(src)/blockSize
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		pr, pw := bpipe.BufferedPipe(
+			bpipe.NewBufMan("test", maxBlocks, blockSize))
+		io.Copy(pw, bytes.NewReader(src))
+		pw.Close()
+		b.StartTimer()
+		io.Copy(ioutil.Discard, pr)
+	}
+
+}
