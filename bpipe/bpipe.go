@@ -24,7 +24,10 @@ type BufMan struct {
 // capacity `bufCap`.
 func NewBufMan(name string, max int, bufCap int) *BufMan {
 	newBuf := func() interface{} {
-		return make([]byte, bufCap)
+		buf := make([]byte, bufCap)
+		bufmanBytes.Add(int64(bufCap))
+		bufmanBuffers.Add(1)
+		return buf
 	}
 	return &BufMan{Name: name, pool: bpool.New(max, newBuf)}
 }
