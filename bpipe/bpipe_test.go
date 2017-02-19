@@ -85,8 +85,10 @@ func BenchmarkReadWrite(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		pr, pw := bpipe.BufferedPipe(
 			bpipe.NewBufMan("test", maxBlocks, blockSize))
-		io.Copy(pw, bytes.NewReader(src))
-		pw.Close()
+		go func() {
+			io.Copy(pw, bytes.NewReader(src))
+			pw.Close()
+		}()
 		io.Copy(ioutil.Discard, pr)
 	}
 
