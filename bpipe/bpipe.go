@@ -142,9 +142,10 @@ func (this *BufferedPipeWriter) ReadFrom(r io.Reader) (int, error) {
 
 		this.state.cond.L.Lock()
 		this.state.pending.PushBack(bytes.NewBuffer(buffer))
+		if this.state.pending.Len() == 1 {
+			this.state.cond.Signal()
+		}
 		this.state.cond.L.Unlock()
-
-		this.state.cond.Signal()
 
 		if er == io.EOF {
 			break
