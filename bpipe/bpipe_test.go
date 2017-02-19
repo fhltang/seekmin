@@ -132,3 +132,14 @@ func BenchmarkRead(b *testing.B) {
 	}
 
 }
+
+func BenchmarkNewBufferedPipe(b *testing.B) {
+	blockSize := 16384
+	maxBlocks := 1024
+	bufman := bpipe.NewBufMan("test", maxBlocks, blockSize)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = bpipe.BufferedPipe(bufman)
+	}
+}
