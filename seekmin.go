@@ -16,12 +16,11 @@ import (
 	"github.com/fhltang/seekmin/seekmin"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"sync"
 	"time"
 )
-
-import _ "net/http/pprof"
 
 var port = flag.Int(
 	"port", 0,
