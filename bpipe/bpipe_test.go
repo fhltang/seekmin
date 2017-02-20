@@ -75,7 +75,26 @@ func BenchmarkBaseline(b *testing.B) {
 
 // Benchmark for reading and writing from a buffered pipe.
 // Copies 1MB into the pipe and then 1MB out of the pipe.
-func BenchmarkReadWrite(b *testing.B) {
+func BenchmarkSerialReadWrite(b *testing.B) {
+	src := make([]byte, 1024*1024)
+
+	blockSize := 16384
+	maxBlocks := 1 + len(src)/blockSize
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		pr, pw := bpipe.BufferedPipe(
+			bpipe.NewBufMan("test", maxBlocks, blockSize))
+		io.Copy(pw, bytes.NewReader(src))
+		pw.Close()
+		io.Copy(ioutil.Discard, pr)
+	}
+
+}
+
+// Benchmark for concurrently reading and writing from a buffered pipe.
+// Concurrently writes and reads 1MB via the pipe.
+func BenchmarkConcReadWrite(b *testing.B) {
 	src := make([]byte, 1024*1024)
 
 	blockSize := 16384
