@@ -85,7 +85,8 @@ func BenchmarkSerialReadWrite(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		pr, pw := bpipe.BufferedPipe(
 			bpipe.NewBufMan("test", maxBlocks, blockSize))
-		io.Copy(pw, bytes.NewReader(src))
+		r := bytes.NewReader(src)
+		io.Copy(pw, r)
 		pw.Close()
 		io.Copy(ioutil.Discard, pr)
 	}
@@ -105,7 +106,8 @@ func BenchmarkConcReadWrite(b *testing.B) {
 		pr, pw := bpipe.BufferedPipe(
 			bpipe.NewBufMan("test", maxBlocks, blockSize))
 		go func() {
-			io.Copy(pw, bytes.NewReader(src))
+			r := bytes.NewReader(src)
+			io.Copy(pw, r)
 			pw.Close()
 		}()
 		io.Copy(ioutil.Discard, pr)
