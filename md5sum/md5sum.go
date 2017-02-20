@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -20,6 +21,9 @@ var exitOnCompletion = flag.Bool(
 	"Exit on completion.  If --port is specified, setting this to false "+
 		"will cause the program to continue listening for HTTP "+
 		"requests.")
+var devNull = flag.Bool(
+	"dev_null", false,
+	"If set to true, just read the files and do not compute checksum.")
 
 func main() {
 	flag.Parse()
@@ -42,13 +46,21 @@ func main() {
 		}
 		func () {
 			defer f.Close()
-			hash:=md5.New()
-			_, err := io.Copy(hash, f)
+			var writer io.Writer
+			hash := md5.New()
+			if *devNull {
+				writer = ioutil.Discard
+			} else {
+				writer = hash
+			}
+			_, err := io.Copy(writer, f)
 			if err != nil {
 				fmt.Printf("Failed hashing %s: %s", file, err)
 				return
 			}
-			fmt.Printf("%x  %s\n", hash.Sum(nil), file)
+			if !*devNull {
+				fmt.Printf("%x  %s\n", hash.Sum(nil), file)
+			}
 		}()
 	}
 
