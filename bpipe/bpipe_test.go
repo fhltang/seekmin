@@ -2,6 +2,7 @@ package bpipe_test
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/fhltang/seekmin/bpipe"
 	"io"
 	"io/ioutil"
@@ -98,19 +99,40 @@ func BenchmarkSerialReadWrite(b *testing.B) {
 func BenchmarkConcReadWrite(b *testing.B) {
 	src := make([]byte, 1024*1024)
 
-	blockSize := 16384
-	maxBlocks := 1 + len(src)/blockSize
+	type TestCase struct {
+		blockSize, maxBlocks int
+	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		pr, pw := bpipe.BufferedPipe(
-			bpipe.NewBufMan("test", maxBlocks, blockSize))
-		go func() {
-			r := bytes.NewReader(src)
-			io.Copy(pw, r)
-			pw.Close()
-		}()
-		io.Copy(ioutil.Discard, pr)
+	cases := []TestCase{
+		// Different maxBlocks.
+		{16384, 1},
+		{16384, 2},
+		{16384, 4},
+		{16384, 8},
+		{16384, 16},
+		{16384, 32},
+
+		// Different blockSize.
+		{4096, 4},
+		{8192, 4},
+		{32768, 4},
+		{65536, 4},
+	}
+
+	for _, tc := range cases {
+		DoConcReadWrite := func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				pr, pw := bpipe.BufferedPipe(
+					bpipe.NewBufMan("test", tc.maxBlocks, tc.blockSize))
+				go func() {
+					r := bytes.NewReader(src)
+					io.Copy(pw, r)
+					pw.Close()
+				}()
+				io.Copy(ioutil.Discard, pr)
+			}
+		}
+		b.Run(fmt.Sprintf("blockSize=%d_maxBlocks=%d", tc.blockSize, tc.maxBlocks), DoConcReadWrite)
 	}
 
 }
