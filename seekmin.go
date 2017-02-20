@@ -30,7 +30,7 @@ var exitOnCompletion = flag.Bool(
 	"exit_on_completion", false,
 	"Exit on completion.  If --port is specified, setting this to false "+
 		"will cause the program to continue listening for HTTP "+
-		"requets.")
+		"requests.")
 var blockSize = flag.Int(
 	"block_size", 65536,
 	"File read block size.  A small block size allows memory to be used "+
