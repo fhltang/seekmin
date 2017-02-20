@@ -143,8 +143,9 @@ func (this *BufferedPipeWriter) ReadFrom(r io.Reader) (int, error) {
 		buffer = buffer[:n]
 		cum += n
 
+		b := bytes.NewBuffer(buffer)
 		this.state.cond.L.Lock()
-		this.state.pending.PushBack(bytes.NewBuffer(buffer))
+		this.state.pending.PushBack(b)
 		if this.state.pending.Len() == 1 {
 			this.state.cond.Signal()
 		}
